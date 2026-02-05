@@ -51,6 +51,8 @@ param vmUserPassword string
 @allowed([true, false])
 param enableGrafanaMonitoring bool
 
+param grafanaName string = 'amg-${customerName}-grafana-${environmentType}'
+
 //
 // Modules
 //
@@ -333,12 +335,11 @@ module createLinuxVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21
   ]
 }
 
-
 module createAzureManagedGrafana 'modules/grafana/main.bicep' = if (enableGrafanaMonitoring) {
   name: 'create-azure-managed-grafana'
   scope: resourceGroup(resourceGroupName)
   params: {
-    name: 'amw-${customerName}-grafana-${environmentType}'
+    name: grafanaName
     location: 'northeurope' // Hard Coded due to Capacity Issues
     grafanaMajorVersion: '12'
     publicNetworkAccess: 'Enabled'
@@ -357,6 +358,20 @@ module createAzureManagedGrafana 'modules/grafana/main.bicep' = if (enableGrafan
     tags: tags
   }
   dependsOn: [
+    createAzureMonitorWorkspace
+  ]
+}
+
+module assignRbacMontiorReaderRoleGrafana 'br/public:avm/ptn/authorization/resource-role-assignment:0.1.2' = if (enableGrafanaMonitoring) {
+  name: 'assign-rbac-monitor-reader-role-grafana'
+  scope: resourceGroup(resourceGroupName)
+  params: {
+    roleDefinitionId: 'b0d8363b-8ddd-447d-831f-62ca05bff136' // Monitoring Reader Role
+    principalId: createAzureManagedGrafana.outputs.systemAssignedPrincipalId
+    resourceId: createAzureMonitorWorkspace.outputs.resourceId
+  }
+  dependsOn: [
+    createAzureManagedGrafana
     createAzureMonitorWorkspace
   ]
 }

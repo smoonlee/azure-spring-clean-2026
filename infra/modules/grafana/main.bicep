@@ -88,5 +88,11 @@ resource grafana 'Microsoft.Dashboard/grafana@2025-08-01' = {
   }
 }
 
+@description('Resource ID of the created Grafana instance.')
 output grafanaResourceId string = grafana.id
+
+@description('Endpoint URL of the created Grafana instance.')
 output grafanaEndpoint string = grafana.properties.endpoint
+
+@description('System-assigned managed identity principalId (empty when identity is not enabled).')
+output systemAssignedPrincipalId string = (grafana.identity.?principalId) ?? ''

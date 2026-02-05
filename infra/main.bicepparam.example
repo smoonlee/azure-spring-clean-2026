@@ -7,5 +7,9 @@ param environmentType = 'dev'
 param deployedBy = ''
 param tags = {}
 
+// Virtual Machine Configuration
 param vmUserName = ''
 param vmUserPassword = ''
+
+// Toggle Azure Managed Grafana deployment
+param enableGrafanaMonitoring = true
