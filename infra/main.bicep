@@ -26,13 +26,13 @@ param tags object = {
 param resourceGroupName string = 'rg-${customerName}-asc-vminsights-${locationShortCode}'
 param virtualNetworkName string = 'vnet-${customerName}-asc-vminsights-${locationShortCode}'
 param networkSecurityGroupName string = 'nsg-${customerName}-asc-${locationShortCode}'
-param dataCollectionRuleName string = 'MSVMOtel-${location}-${vmHostName}'
+param dataCollectionRuleName string = 'MSVMOtel-${location}-metrics'
 
 param vmHostName string = 'vm-windows'
-param vmUserName string = 'azureuser'
+param vmUserName string
 
 @secure()
-param vmUserPassword string = 'P@ssw0rd123!'
+param vmUserPassword string
 
 //
 // Modules
@@ -76,6 +76,7 @@ module createDataCollectionRule 'br/public:avm/res/insights/data-collection-rule
             ]
             samplingFrequencyInSeconds: 60
             counterSpecifiers: [
+              // https://learn.microsoft.com/en-us/azure/azure-monitor/vm/vminsights-opentelemetry#additional-metrics
               'system.filesystem.usage'
               'system.disk.io'
               'system.disk.operation_time'
@@ -86,6 +87,48 @@ module createDataCollectionRule 'br/public:avm/res/insights/data-collection-rule
               'system.network.dropped'
               'system.network.errors'
               'system.uptime'
+              'system.cpu.utilization'
+              'system.cpu.logical.count'
+              'system.cpu.physical.count'
+              'system.cpu.frequency'
+              'system.cpu.load_average.1m'
+              'system.cpu.load_average.5m'
+              'system.cpu.load_average.15m'
+              'system.memory.utilization'
+              'system.memory.limit'
+              'system.memory.page_size'
+              'system.linux.memory.available'
+              'system.linux.memory.dirty'
+              'system.paging.faults'
+              'system.paging.operations'
+              'system.paging.usage'
+              'system.paging.utilization'
+              'system.disk.io_time'
+              'system.disk.merged'
+              'system.disk.pending_operations'
+              'system.disk.weighted_io_time'
+              'system.filesystem.utilization'
+              'system.filesystem.inodes.usage'
+              'system.network.packets'
+              'system.network.connections'
+              'system.network.conntrack.count'
+              'system.network.conntrack.max'
+              'process.uptime'
+              'process.cpu.time'
+              'process.cpu.utilization'
+              'process.memory.usage'
+              'process.memory.virtual'
+              'process.memory.utilization'
+              'process.disk.io'
+              'process.disk.operations'
+              'process.paging.faults'
+              'process.open_file_descriptors'
+              'process.threads'
+              'process.handles'
+              'process.context_switches'
+              'process.signals_pending'
+              'system.processes.count'
+              'system.processes.created'
             ]
             name: 'OtelDataSource'
           }
@@ -169,6 +212,9 @@ module createVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21.0' =
     encryptionAtHost: true
     vTpmEnabled: true
     securityType: 'TrustedLaunch'
+    managedIdentities: {
+      systemAssigned: true // Required for OTEL Telemetry Extension to send data to Monitor Workspace
+    }
     imageReference: {
       publisher: 'MicrosoftWindowsServer'
       offer: 'WindowsServer'
@@ -210,6 +256,5 @@ module createVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21.0' =
   }
   dependsOn: [
     createVirtualNetwork
-    createDataCollectionRule
   ]
 }

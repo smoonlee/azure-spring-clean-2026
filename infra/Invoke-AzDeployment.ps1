@@ -507,6 +507,7 @@ if ($deploy) {
         --location $location `
         --template-file ./main.bicep `
         --parameters ./main.bicepparam `
+        --parameters ./main.bicepparam
         --parameters `
         location=$location `
         locationShortCode=$($locationShortCodeMap.$location) `
