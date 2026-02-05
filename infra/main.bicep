@@ -23,16 +23,33 @@ param tags object = {
   deployedDate: utcNow('yyyy-MM-dd')
 }
 
+@description('Resource Group Name')
 param resourceGroupName string = 'rg-${customerName}-asc-vminsights-${locationShortCode}'
+
+@description('Virtual Network Name')
 param virtualNetworkName string = 'vnet-${customerName}-asc-vminsights-${locationShortCode}'
+
+@description('Network Security Group Name')
 param networkSecurityGroupName string = 'nsg-${customerName}-asc-${locationShortCode}'
+
+@description('Data Collection Rule Name')
 param dataCollectionRuleName string = 'MSVMOtel-${location}-metrics'
 
-param vmHostName string = 'vm-windows'
+@description('Virtual Machine Name - Windows')
+param vmWindowsHostName string = 'vm-windows'
+
+@description('Virtual Machine Name - Linux')
+param vmLinuxHostName string = 'vm-linux'
+
+@description('Virtual Machine Admin Username')
 param vmUserName string
 
 @secure()
+@description('Virtual Machine Admin Password')
 param vmUserPassword string
+
+@allowed([true, false])
+param enableGrafanaMonitoring bool
 
 //
 // Modules
@@ -47,8 +64,8 @@ module createResourceGroup 'br/public:avm/res/resources/resource-group:0.4.3' = 
   }
 }
 
-module createMonitorWorkspace 'modules/monitorWorkspace/main.bicep' = {
-  name: 'create-monitor-workspace'
+module createAzureMonitorWorkspace 'modules/monitorWorkspace/main.bicep' = {
+  name: 'create-azure-monitor-workspace'
   scope: resourceGroup(resourceGroupName)
   params: {
     name: 'mon-${customerName}-asc-vminsights-${locationShortCode}'
@@ -137,7 +154,7 @@ module createDataCollectionRule 'br/public:avm/res/insights/data-collection-rule
       destinations: {
         monitoringAccounts: [
           {
-            accountResourceId: createMonitorWorkspace.outputs.resourceId
+            accountResourceId: createAzureMonitorWorkspace.outputs.resourceId
             name: 'MonitoringAccountDestination'
           }
         ]
@@ -156,7 +173,7 @@ module createDataCollectionRule 'br/public:avm/res/insights/data-collection-rule
     tags: tags
   }
   dependsOn: [
-    createMonitorWorkspace
+    createAzureMonitorWorkspace
   ]
 }
 
@@ -196,11 +213,11 @@ module createVirtualNetwork 'br/public:avm/res/network/virtual-network:0.7.2' = 
   ]
 }
 
-module createVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21.0' = {
-  name: 'create-virtual-machine'
+module createWindowsVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21.0' = {
+  name: 'create-windows-virtual-machine'
   scope: resourceGroup(resourceGroupName)
   params: {
-    name: vmHostName
+    name: vmWindowsHostName
     adminUsername: vmUserName
     adminPassword: vmUserPassword
     location: location
@@ -226,9 +243,6 @@ module createVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21.0' =
         ipConfigurations: [
           {
             name: 'ipconfig01'
-            pipConfiguration: {
-              name: '${vmHostName}-pip-01'
-            }
             subnetResourceId: createVirtualNetwork.outputs.subnetResourceIds[0]
           }
         ]
@@ -256,5 +270,93 @@ module createVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21.0' =
   }
   dependsOn: [
     createVirtualNetwork
+  ]
+}
+
+module createLinuxVirtualMachine 'br/public:avm/res/compute/virtual-machine:0.21.0' = {
+  name: 'create-linux-virtual-machine'
+  scope: resourceGroup(resourceGroupName)
+  params: {
+    name: vmLinuxHostName
+    adminUsername: vmUserName
+    adminPassword: vmUserPassword
+    location: location
+    osType: 'Linux'
+    vmSize: 'Standard_D2ls_v6'
+    availabilityZone: -1
+    bootDiagnostics: true
+    secureBootEnabled: true
+    encryptionAtHost: true
+    vTpmEnabled: true
+    securityType: 'TrustedLaunch'
+    managedIdentities: {
+      systemAssigned: true // Required for OTEL Telemetry Extension to send data to Monitor Workspace
+    }
+    imageReference: {
+      publisher: 'Canonical'
+      offer: 'ubuntu-24_04-lts'
+      sku: 'server'
+      version: 'latest'
+    }
+    nicConfigurations: [
+      {
+        ipConfigurations: [
+          {
+            name: 'ipconfig01'
+            subnetResourceId: createVirtualNetwork.outputs.subnetResourceIds[0]
+          }
+        ]
+        nicSuffix: '-nic-01'
+        enableAcceleratedNetworking: true
+      }
+    ]
+    osDisk: {
+      caching: 'ReadWrite'
+      diskSizeGB: 128
+      managedDisk: {
+        storageAccountType: 'Premium_LRS'
+      }
+    }
+    extensionMonitoringAgentConfig: {
+      enabled: true
+      dataCollectionRuleAssociations: [
+        {
+          dataCollectionRuleResourceId: createDataCollectionRule.outputs.resourceId
+          name: 'SendMetricsToLAW'
+        }
+      ]
+    }
+    tags: tags
+  }
+  dependsOn: [
+    createVirtualNetwork
+  ]
+}
+
+
+module createAzureManagedGrafana 'modules/grafana/main.bicep' = if (enableGrafanaMonitoring) {
+  name: 'create-azure-managed-grafana'
+  scope: resourceGroup(resourceGroupName)
+  params: {
+    name: 'amw-${customerName}-grafana-${environmentType}'
+    location: 'northeurope' // Hard Coded due to Capacity Issues
+    grafanaMajorVersion: '12'
+    publicNetworkAccess: 'Enabled'
+    zoneRedundancy: 'Disabled'
+    sku: {
+      name: 'Standard'
+      size: 'X1'
+    }
+    grafanaIntegrations: {
+      azureMonitorWorkspaceIntegrations: [
+        {
+          azureMonitorWorkspaceResourceId: createAzureMonitorWorkspace.outputs.resourceId
+        }
+      ]
+    }
+    tags: tags
+  }
+  dependsOn: [
+    createAzureMonitorWorkspace
   ]
 }

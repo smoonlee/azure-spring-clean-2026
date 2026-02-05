@@ -1,0 +1,26 @@
+module createAzureManagedGrafana 'modules/grafana/main.bicep' = if (enableGrafanaMonitoring) {
+  name: 'create-azure-managed-grafana'
+  scope: resourceGroup(resourceGroupName)
+  params: {
+    name: 'amw-grafana-prod'
+    location: 'northeurope' // Hard Coded due to Capacity Issues
+    grafanaMajorVersion: '12'
+    publicNetworkAccess: 'Enabled'
+    zoneRedundancy: 'Disabled'
+    sku: {
+      name: 'Standard'
+      size: 'X1'
+    }
+    grafanaIntegrations: {
+      azureMonitorWorkspaceIntegrations: [
+        {
+          azureMonitorWorkspaceResourceId: createAzureMonitorWorkspace.outputs.resourceId
+        }
+      ]
+    }
+    tags: tags
+  }
+  dependsOn: [
+    createAzureMonitorWorkspace
+  ]
+}
